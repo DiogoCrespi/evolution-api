@@ -1561,7 +1561,12 @@ export class BaileysStartupService extends ChannelStartupService {
       const readChatToUpdate: Record<string, true> = {}; // {remoteJid: true}
 
       for await (const { key, update } of args) {
-        if (settings?.groupsIgnore && key.remoteJid?.includes('@g.us')) {
+        // Normalize JIDs immediately to ensure consistent DB lookups
+        const keyAny = key as any;
+        if (keyAny.remoteJid) keyAny.remoteJid = keyAny.remoteJid.replace(/:.*$/, '');
+        if (keyAny.participant) keyAny.participant = keyAny.participant.replace(/:.*$/, '');
+
+        if (settings?.groupsIgnore && keyAny.remoteJid?.includes('@g.us')) {
           continue;
         }
 
@@ -1612,9 +1617,9 @@ export class BaileysStartupService extends ChannelStartupService {
 
           const message: any = {
             keyId: key.id,
-            remoteJid: key?.remoteJid,
+            remoteJid: keyAny?.remoteJid?.replace(/:.*$/, ''),
             fromMe: key.fromMe,
-            participant: key?.participant,
+            participant: keyAny?.participant?.replace(/:.*$/, ''),
             status: status[update.status] ?? 'SERVER_ACK',
             pollUpdates,
             instanceId: this.instanceId,
@@ -4662,26 +4667,20 @@ export class BaileysStartupService extends ChannelStartupService {
     return obj;
   }
 
-  private prepareMessage(message: proto.IWebMessageInfo): any {
-    const contentType = getContentType(message.message);
-    const contentMsg = message?.message[contentType] as any;
-
-    const messageRaw = {
-      key: message.key, // Save key exactly as it comes from Baileys
-      pushName:
-        message.pushName ||
-        (message.key.fromMe
-          ? 'Você'
-          : message?.participant || (message.key?.participant ? message.key.participant.split('@')[0] : null)),
-      status: status[message.status],
-      message: this.deserializeMessageBuffers({ ...message.message }),
-      contextInfo: this.deserializeMessageBuffers(contentMsg?.contextInfo),
-      messageType: contentType || 'unknown',
-      messageTimestamp: Long.isLong(message.messageTimestamp)
-        ? message.messageTimestamp.toNumber()
-        : (message.messageTimestamp as number),
+  private prepareMessage(message: WAMessage): Message {
+    const keyAny = message.key as any;
+    const messageRaw: any = {
+      key: {
+        ...message.key,
+        remoteJid: keyAny.remoteJid?.replace(/:.*$/, ''),
+        participant: keyAny.participant?.replace(/:.*$/, ''),
+      },
+      pushName: message.pushName,
+      message: message.message,
+      messageType: getContentType(message.message),
+      messageTimestamp: message.messageTimestamp,
+      source: getDevice(keyAny.id),
       instanceId: this.instanceId,
-      source: getDevice(message.key.id),
     };
 
     if (!messageRaw.status && message.key.fromMe === false) {
