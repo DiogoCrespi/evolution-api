@@ -1201,10 +1201,10 @@ export class BaileysStartupService extends ChannelStartupService {
             }
           }
 
-          const messageRaw = this.prepareMessage(received);
+          const messageRaw = this.prepareMessage(received) as any;
 
           if (messageRaw.messageType === 'pollUpdateMessage') {
-            const pollCreationKey = messageRaw.message.pollUpdateMessage.pollCreationMessageKey;
+            const pollCreationKey = (messageRaw.message as any).pollUpdateMessage.pollCreationMessageKey;
             const pollMessage = (await this.getMessage(pollCreationKey, true)) as proto.IWebMessageInfo;
             const pollMessageSecret = (await this.getMessage(pollCreationKey)) as any;
 
@@ -1213,7 +1213,7 @@ export class BaileysStartupService extends ChannelStartupService {
                 (pollMessage.message as any).pollCreationMessage?.options ||
                 (pollMessage.message as any).pollCreationMessageV3?.options ||
                 [];
-              const pollVote = messageRaw.message.pollUpdateMessage.vote;
+              const pollVote = (messageRaw.message as any).pollUpdateMessage.vote;
 
               const voterJid = received.key.fromMe
                 ? this.instance.wuid
@@ -1293,14 +1293,14 @@ export class BaileysStartupService extends ChannelStartupService {
                 })
                 .map((option) => option.optionName);
 
-              messageRaw.message.pollUpdateMessage.vote.selectedOptions = selectedOptionNames;
+              (messageRaw.message as any).pollUpdateMessage.vote.selectedOptions = selectedOptionNames;
 
               const pollUpdates = pollOptions.map((option) => ({
                 name: option.optionName,
                 voters: selectedOptionNames.includes(option.optionName) ? [successfulVoterJid] : [],
               }));
 
-              messageRaw.pollUpdates = pollUpdates;
+              (messageRaw as any).pollUpdates = pollUpdates;
             }
           }
 
@@ -1348,13 +1348,14 @@ export class BaileysStartupService extends ChannelStartupService {
             });
 
             if (openAiDefaultSettings && openAiDefaultSettings.openaiCredsId && openAiDefaultSettings.speechToText) {
-              messageRaw.message.speechToText = `[audio] ${await this.openaiService.speechToText(received, this)}`;
+              (messageRaw.message as any).speechToText =
+                `[audio] ${await this.openaiService.speechToText(received, this)}`;
             }
           }
 
           if (this.configService.get<Database>('DATABASE').SAVE_DATA.NEW_MESSAGE) {
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const { pollUpdates, ...messageData } = messageRaw;
+            const { pollUpdates, ...messageData } = messageRaw as any;
             const msg = await this.prismaRepository.message.create({ data: messageData });
 
             const { remoteJid } = received.key;
@@ -1430,7 +1431,7 @@ export class BaileysStartupService extends ChannelStartupService {
 
                     const mediaUrl = await s3Service.getObjectUrl(fullName);
 
-                    messageRaw.message.mediaUrl = mediaUrl;
+                    (messageRaw.message as any).mediaUrl = mediaUrl;
 
                     await this.prismaRepository.message.update({ where: { id: msg.id }, data: messageRaw });
                   }
@@ -1452,7 +1453,7 @@ export class BaileysStartupService extends ChannelStartupService {
                 );
 
                 if (buffer) {
-                  messageRaw.message.base64 = buffer.toString('base64');
+                  (messageRaw.message as any).base64 = buffer.toString('base64');
                 } else {
                   // retry to download media
                   const buffer = await downloadMediaMessage(
@@ -1463,7 +1464,7 @@ export class BaileysStartupService extends ChannelStartupService {
                   );
 
                   if (buffer) {
-                    messageRaw.message.base64 = buffer.toString('base64');
+                    (messageRaw.message as any).base64 = buffer.toString('base64');
                   }
                 }
               } catch (error) {
@@ -1475,8 +1476,8 @@ export class BaileysStartupService extends ChannelStartupService {
           this.logger.verbose(messageRaw);
 
           sendTelemetry(`received.message.${messageRaw.messageType ?? 'unknown'}`);
-          if (messageRaw.key.remoteJid?.includes('@lid') && messageRaw.key.remoteJidAlt) {
-            messageRaw.key.remoteJid = messageRaw.key.remoteJidAlt;
+          if ((messageRaw.key as any).remoteJid?.includes('@lid') && (messageRaw.key as any).remoteJidAlt) {
+            (messageRaw.key as any).remoteJid = (messageRaw.key as any).remoteJidAlt;
           }
           console.log(messageRaw);
 
@@ -1484,7 +1485,7 @@ export class BaileysStartupService extends ChannelStartupService {
 
           await chatbotController.emit({
             instance: { instanceName: this.instance.name, instanceId: this.instanceId },
-            remoteJid: messageRaw.key.remoteJid,
+            remoteJid: (messageRaw.key as any).remoteJid,
             msg: messageRaw,
             pushName: messageRaw.pushName,
           });
@@ -1513,9 +1514,11 @@ export class BaileysStartupService extends ChannelStartupService {
             await saveOnWhatsappCache([
               {
                 remoteJid:
-                  messageRaw.key.addressingMode === 'lid' ? messageRaw.key.remoteJidAlt : messageRaw.key.remoteJid,
-                remoteJidAlt: messageRaw.key.remoteJidAlt,
-                lid: messageRaw.key.addressingMode === 'lid' ? 'lid' : null,
+                  (messageRaw.key as any).addressingMode === 'lid'
+                    ? (messageRaw.key as any).remoteJidAlt
+                    : (messageRaw.key as any).remoteJid,
+                remoteJidAlt: (messageRaw.key as any).remoteJidAlt,
+                lid: (messageRaw.key as any).addressingMode === 'lid' ? 'lid' : null,
               },
             ]);
           }
@@ -2427,7 +2430,7 @@ export class BaileysStartupService extends ChannelStartupService {
         messageSent.messageTimestamp = messageSent.messageTimestamp?.toNumber();
       }
 
-      const messageRaw = this.prepareMessage(messageSent);
+      const messageRaw = this.prepareMessage(messageSent) as any;
 
       const isMedia =
         messageSent?.message?.imageMessage ||
@@ -2449,14 +2452,15 @@ export class BaileysStartupService extends ChannelStartupService {
         );
       }
 
-      if (this.configService.get<Openai>('OPENAI').ENABLED && messageRaw?.message?.audioMessage) {
+      if (this.configService.get<Openai>('OPENAI').ENABLED && (messageRaw as any)?.message?.audioMessage) {
         const openAiDefaultSettings = await this.prismaRepository.openaiSetting.findFirst({
           where: { instanceId: this.instanceId },
           include: { OpenaiCreds: true },
         });
 
         if (openAiDefaultSettings && openAiDefaultSettings.openaiCredsId && openAiDefaultSettings.speechToText) {
-          messageRaw.message.speechToText = `[audio] ${await this.openaiService.speechToText(messageRaw, this)}`;
+          (messageRaw.message as any).speechToText =
+            `[audio] ${await this.openaiService.speechToText(messageRaw, this)}`;
         }
       }
 
